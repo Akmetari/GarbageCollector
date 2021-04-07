@@ -739,7 +739,7 @@ void ShenandoahHeap::op_uncommit(double shrink_before, size_t shrink_until) {
   }
 
   if (count > 0) {
-    control_thread()->notify_heap_changed();
+    control_thread()->notify_gc();
   }
 }
 
@@ -865,7 +865,7 @@ HeapWord* ShenandoahHeap::allocate_memory(ShenandoahAllocRequest& req) {
   }
 
   if (in_new_region) {
-    control_thread()->notify_heap_changed();
+    control_thread()->notify_gc();
   }
 
   if (result != NULL) {

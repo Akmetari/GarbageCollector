@@ -53,6 +53,17 @@ public:
   virtual void task();
 };
 
+// Periodic task to notify the GC thread at least each GuaranteedGCInterval
+class ShenandoahPeriodicGCNotifyTask : public PeriodicTask {
+private:
+  ShenandoahControlThread* _thread;
+public:
+  ShenandoahPeriodicGCNotifyTask(ShenandoahControlThread* thread) :
+          PeriodicTask(100), _thread(thread) {}
+  virtual void task();
+};
+
+
 class ShenandoahControlThread: public ConcurrentGCThread {
   friend class VMStructs;
 
@@ -69,8 +80,10 @@ private:
   // to make complete explicit cycle for for demanding customers.
   Monitor _alloc_failure_waiters_lock;
   Monitor _gc_waiters_lock;
+  Monitor _control_wait_lock;
   ShenandoahPeriodicTask _periodic_task;
   ShenandoahPeriodicPacerNotify _periodic_pacer_notify_task;
+  ShenandoahPeriodicGCNotifyTask _periodic_gc_notify_task;
 
 public:
   void run_service();
@@ -80,7 +93,7 @@ private:
   ShenandoahSharedFlag _gc_requested;
   ShenandoahSharedFlag _alloc_failure_gc;
   ShenandoahSharedFlag _graceful_shutdown;
-  ShenandoahSharedFlag _heap_changed;
+  ShenandoahSharedFlag _gc_notified;
   ShenandoahSharedFlag _do_counters_update;
   ShenandoahSharedFlag _force_counters_update;
   GCCause::Cause       _requested_gc_cause;
@@ -114,7 +127,7 @@ private:
 
   bool is_explicit_gc(GCCause::Cause cause) const;
 
-  bool check_soft_max_changed() const;
+  bool check_soft_max_changed();
 
 public:
   // Constructor
@@ -135,7 +148,7 @@ public:
   void handle_force_counters_update();
   void set_forced_counters_update(bool value);
 
-  void notify_heap_changed();
+  void notify_gc();
 
   void pacing_notify_alloc(size_t words);
 

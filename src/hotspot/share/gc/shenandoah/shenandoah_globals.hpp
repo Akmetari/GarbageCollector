@@ -189,23 +189,6 @@
           "the samples. Higher values provide more fidelity, at expense "   \
           "of more sampling overhead.")                                     \
                                                                             \
-  product(uintx, ShenandoahControlIntervalMin, 1, EXPERIMENTAL,             \
-          "The minimum sleep interval for the control loop that drives "    \
-          "the cycles. Lower values would increase GC responsiveness "      \
-          "to changing heap conditions, at the expense of higher perf "     \
-          "overhead. Time is in milliseconds.")                             \
-                                                                            \
-  product(uintx, ShenandoahControlIntervalMax, 10, EXPERIMENTAL,            \
-          "The maximum sleep interval for control loop that drives "        \
-          "the cycles. Lower values would increase GC responsiveness "      \
-          "to changing heap conditions, at the expense of higher perf "     \
-          "overhead. Time is in milliseconds.")                             \
-                                                                            \
-  product(uintx, ShenandoahControlIntervalAdjustPeriod, 1000, EXPERIMENTAL, \
-          "The time period for one step in control loop interval "          \
-          "adjustment. Lower values make adjustments faster, at the "       \
-          "expense of higher perf overhead. Time is in milliseconds.")      \
-                                                                            \
   product(bool, ShenandoahVerify, false, DIAGNOSTIC,                        \
           "Enable internal verification. This would catch many GC bugs, "   \
           "but it would also stall the collector during the verification, " \
