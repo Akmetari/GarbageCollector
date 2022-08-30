@@ -35,7 +35,7 @@ on:
       apt-gcc-version:
         required: false
         type: string
-        default: '11=11.2.0-19ubuntu1'
+        default: '11.2.0-19ubuntu1'
       apt-gcc-cross-suffix:
         required: false
         type: string
