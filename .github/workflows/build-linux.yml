@@ -42,6 +42,9 @@ on:
         required: false
         type: string
         default: '[ "debug", "release" ]'
+      gcc-major-version:
+        required: true
+        type: string
       apt-gcc-version:
         required: true
         type: string
