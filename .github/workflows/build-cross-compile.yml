@@ -31,11 +31,11 @@ on:
       gcc-major-version:
         required: false
         type: string
-        default: '10'
+        default: '11'
       apt-gcc-version:
         required: false
         type: string
-        default: '10.3.0-1ubuntu1~20.04'
+        default: '11=11.2.0-19ubuntu1'
       apt-gcc-cross-suffix:
         required: false
         type: string
@@ -143,8 +143,8 @@ jobs:
           --openjdk-target=${{ matrix.gnu-arch }}-linux-gnu${{ matrix.gnu-abi}}
           --with-sysroot=sysroot
           --with-build-jdk=${{ steps.buildjdk.outputs.jdk-path }}
-          CC=${{ matrix.gnu-arch }}-linux-gnu${{ matrix.gnu-abi}}-gcc-10
-          CXX=${{ matrix.gnu-arch }}-linux-gnu${{ matrix.gnu-abi}}-g++-10
+          CC=${{ matrix.gnu-arch }}-linux-gnu${{ matrix.gnu-abi}}-gcc-${{ inputs.gcc-major-version }}
+          CXX=${{ matrix.gnu-arch }}-linux-gnu${{ matrix.gnu-abi}}-g++-${{ inputs.gcc-major-version }}
 
       - name: 'Build'
         id: build
