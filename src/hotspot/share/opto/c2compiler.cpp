@@ -756,6 +756,8 @@ bool C2Compiler::is_intrinsic_supported(const methodHandle& method, bool is_virt
   case vmIntrinsics::_Preconditions_checkIndex:
   case vmIntrinsics::_Preconditions_checkLongIndex:
   case vmIntrinsics::_getObjectSize:
+  case vmIntrinsics::_shipilev_magic_sizeOf:
+  case vmIntrinsics::_shipilev_magic_addressOf:
     break;
 
   case vmIntrinsics::_VectorCompressExpand:
@@ -785,7 +787,10 @@ bool C2Compiler::is_intrinsic_supported(const methodHandle& method, bool is_virt
     return EnableVectorSupport;
   case vmIntrinsics::_blackhole:
     break;
-
+  case vmIntrinsics::_shipilev_magic_timestamp:
+    return Matcher::match_rule_supported(Op_Timestamp);
+  case vmIntrinsics::_shipilev_magic_timestamp_serial:
+    return Matcher::match_rule_supported(Op_TimestampSerial);
   default:
     return false;
   }

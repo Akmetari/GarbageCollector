@@ -358,6 +358,8 @@ class LibraryCallKit : public GraphKit {
   bool inline_vector_compress_expand();
   bool inline_index_vector();
 
+  bool inline_timestamp(bool serial);
+
   Node* gen_call_to_svml(int vector_api_op_id, BasicType bt, int num_elem, Node* opd1, Node* opd2);
 
   enum VectorMaskUseType {
@@ -382,5 +384,11 @@ class LibraryCallKit : public GraphKit {
   bool inline_getObjectSize();
 
   bool inline_blackhole();
+
+  bool inline_sizeOf();
+  bool inline_sizeOf_impl(Node* obj);
+
+  bool inline_addressOf();
+
 };
 

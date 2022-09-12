@@ -583,7 +583,20 @@ class methodHandle;
   do_intrinsic(_Continuation_doYield,      jdk_internal_vm_Continuation, doYield_name,      continuationDoYield_signature, F_SN) \
    do_alias(    continuationDoYield_signature,     void_int_signature)                                                  \
                                                                                                                         \
-  /* support for UnsafeConstants */                                                                                     \
+  do_intrinsic(_shipilev_magic_timestamp,             net_shipilev_Magic, timestamp_name,            void_long_signature,   F_SN) \
+    do_name(timestamp_name,             "timestamp")                                                                              \
+  do_intrinsic(_shipilev_magic_timestamp_serial,      net_shipilev_Magic, timestampSerial_name,      void_long_signature,   F_SN) \
+    do_name(timestampSerial_name,       "timestampSerial")                                                                        \
+  do_intrinsic(_shipilev_magic_sizeOf,                net_shipilev_Magic, sizeOf_name,               object_long_signature, F_SN) \
+    do_name(sizeOf_name,                "sizeOf0")                                                                                \
+  do_intrinsic(_shipilev_magic_addressOf,             net_shipilev_Magic, addressOf_name,            object_long_signature, F_SN) \
+    do_name(addressOf_name,             "addressOf0")                                                                             \
+  do_intrinsic(_shipilev_magic_getReferencedObjects,  net_shipilev_Magic, getReferencedObjects_name, object_object_array_int_signature, F_SN)  \
+    do_name(getReferencedObjects_name,  "getReferencedObjects")                                                                  \
+    do_class(net_shipilev_Magic,        "net/shipilev/Magic")                                                           \
+                                                                                                                        \
+                                                                                                                        \
+/* support for UnsafeConstants */                                                                                     \
   do_class(jdk_internal_misc_UnsafeConstants,      "jdk/internal/misc/UnsafeConstants")                                 \
                                                                                                                         \
   /* support for Unsafe */                                                                                              \
