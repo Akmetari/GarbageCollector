@@ -44,14 +44,14 @@ inline int ContinuationHelper::frame_align_words(int size) {
 #ifdef _LP64
   return size & 1;
 #else
-  return 0;
+  // FIXME: Is this correct? This should probably be related to
+  // the actual frame::frame_alignment.
+  return size & 3;
 #endif
 }
 
 inline intptr_t* ContinuationHelper::frame_align_pointer(intptr_t* sp) {
-#ifdef _LP64
   sp = align_down(sp, frame::frame_alignment);
-#endif
   return sp;
 }
 

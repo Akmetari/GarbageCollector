@@ -147,6 +147,7 @@ public:
     virtual int Opcode() const;
     virtual const Type *bottom_type() const { return TypeRawPtr::BOTTOM;}
     virtual uint ideal_reg() const { return Op_RegP; }
+    virtual uint hash() const;
 };
 
 

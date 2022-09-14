@@ -258,14 +258,13 @@ template<typename FKind> frame ThawBase::new_stack_frame(const frame& hf, frame&
 }
 
 inline intptr_t* ThawBase::align(const frame& hf, intptr_t* frame_sp, frame& caller, bool bottom) {
-#ifdef _LP64
-  if (((intptr_t)frame_sp & 0xf) != 0) {
-    assert(caller.is_interpreted_frame() || (bottom && hf.compiled_frame_stack_argsize() % 2 != 0), "");
-    frame_sp--;
-    caller.set_sp(caller.sp() - 1);
+  if (!is_aligned(frame_sp, frame::frame_alignment)) {
+    assert(caller.is_interpreted_frame() ||
+           (bottom && hf.compiled_frame_stack_argsize() % LP64_ONLY(2) NOT_LP64(4) != 0), "");
+    frame_sp = align_down(frame_sp, frame::frame_alignment);
+    caller.set_sp(align_down(caller.sp(), frame::frame_alignment));
   }
   assert(is_aligned(frame_sp, frame::frame_alignment), "");
-#endif
 
   return frame_sp;
 }

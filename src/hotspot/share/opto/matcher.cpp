@@ -528,6 +528,11 @@ void Matcher::init_first_stack_mask() {
   guarantee(RegMask::can_represent_arg(OptoReg::add(_out_arg_limit,-1)),
             "must be able to represent all call arguments in reg mask");
   OptoReg::Name init = _out_arg_limit;
+
+  // FIXME: Working around C2 stack problems.
+//  init = OptoReg::Name(align_up(init, (int)RegMask::SlotsPerLong));
+//  assert(is_even(init), "Sanity");
+
   for (i = init; RegMask::can_represent(i); i = OptoReg::add(i,1)) {
     C->FIRST_STACK_mask().Insert(i);
   }

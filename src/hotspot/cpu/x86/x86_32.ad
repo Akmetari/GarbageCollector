@@ -1749,6 +1749,7 @@ encode %{
     // CALL directly to the runtime
     emit_d32_reloc(cbuf, ($meth$$method - (int)(cbuf.insts_end()) - 4),
                 runtime_call_Relocation::spec(), RELOC_IMM32 );
+    _masm.clear_inst_mark();
     __ post_call_nop();
 
     if (UseSSE >= 2) {
@@ -1809,14 +1810,12 @@ encode %{
       emit_d32_reloc(cbuf, ($meth$$method - (int)(cbuf.insts_end()) - 4),
                      runtime_call_Relocation::spec(),
                      RELOC_IMM32);
-      __ post_call_nop();
     } else {
       int method_index = resolved_method_index(cbuf);
       RelocationHolder rspec = _optimized_virtual ? opt_virtual_call_Relocation::spec(method_index)
                                                   : static_call_Relocation::spec(method_index);
       emit_d32_reloc(cbuf, ($meth$$method - (int)(cbuf.insts_end()) - 4),
                      rspec, RELOC_DISP32);
-      __ post_call_nop();
       address mark = cbuf.insts_mark();
       if (CodeBuffer::supports_shared_stubs() && _method->can_be_statically_bound()) {
         // Calls of the same statically bound method can share
@@ -1831,6 +1830,8 @@ encode %{
         }
       }
     }
+    _masm.clear_inst_mark();
+    __ post_call_nop();
   %}
 
   enc_class Java_Dynamic_Call (method meth) %{    // JAVA DYNAMIC CALL
@@ -1849,6 +1850,7 @@ encode %{
     $$$emit8$primary;
     emit_rm(cbuf, 0x01, $secondary, EAX_enc );  // R/M byte
     emit_d8(cbuf, disp);             // Displacement
+    _masm.clear_inst_mark();
     __ post_call_nop();
   %}
 
@@ -2795,6 +2797,7 @@ encode %{
     cbuf.set_insts_mark();
     emit_opcode(cbuf,0xE8);       // Call into runtime
     emit_d32_reloc(cbuf, (CAST_FROM_FN_PTR(address, SharedRuntime::ldiv) - cbuf.insts_end()) - 4, runtime_call_Relocation::spec(), RELOC_IMM32 );
+    _masm.clear_inst_mark();
     __ post_call_nop();
     // Restore stack
     emit_opcode(cbuf, 0x83); // add  SP, #framesize
@@ -2816,6 +2819,7 @@ encode %{
     cbuf.set_insts_mark();
     emit_opcode(cbuf,0xE8);       // Call into runtime
     emit_d32_reloc(cbuf, (CAST_FROM_FN_PTR(address, SharedRuntime::lrem ) - cbuf.insts_end()) - 4, runtime_call_Relocation::spec(), RELOC_IMM32 );
+    _masm.clear_inst_mark();
     __ post_call_nop();
     // Restore stack
     emit_opcode(cbuf, 0x83); // add  SP, #framesize
@@ -2889,6 +2893,7 @@ encode %{
     emit_opcode(cbuf, 0xE9);        // jmp    entry
     emit_d32_reloc(cbuf, (int)OptoRuntime::rethrow_stub() - ((int)cbuf.insts_end())-4,
                    runtime_call_Relocation::spec(), RELOC_IMM32 );
+    _masm.clear_inst_mark();
     __ post_call_nop();
   %}
 
@@ -2939,6 +2944,7 @@ encode %{
     cbuf.set_insts_mark();
     emit_opcode(cbuf,0xE8);       // Call into runtime
     emit_d32_reloc(cbuf, (StubRoutines::x86::d2i_wrapper() - cbuf.insts_end()) - 4, runtime_call_Relocation::spec(), RELOC_IMM32 );
+    _masm.clear_inst_mark();
     __ post_call_nop();
     // Carry on here...
   %}
@@ -2983,6 +2989,7 @@ encode %{
     cbuf.set_insts_mark();
     emit_opcode(cbuf,0xE8);       // Call into runtime
     emit_d32_reloc(cbuf, (StubRoutines::x86::d2l_wrapper() - cbuf.insts_end()) - 4, runtime_call_Relocation::spec(), RELOC_IMM32 );
+    _masm.clear_inst_mark();
     __ post_call_nop();
     // Carry on here...
   %}

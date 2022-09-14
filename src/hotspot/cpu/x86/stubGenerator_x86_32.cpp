@@ -3979,25 +3979,157 @@ class StubGenerator: public StubCodeGenerator {
     StubRoutines::x86::_fpu_subnormal_bias2[2]= 0x7bff;
   }
 
-  address generate_cont_thaw() {
+#undef __
+#define __ _masm->
+
+  address generate_cont_thaw(const char* label, Continuation::thaw_kind kind) {
     if (!Continuations::enabled()) return nullptr;
-    Unimplemented();
-    return nullptr;
+
+    bool return_barrier = Continuation::is_thaw_return_barrier(kind);
+    bool return_barrier_exception = Continuation::is_thaw_return_barrier_exception(kind);
+
+    StubCodeMark mark(this, "StubRoutines", label);
+    address start = __ pc();
+
+    // TODO: Handle Valhalla return types. May require generating different return barriers.
+
+    Register rthread = rdi;
+    __ get_thread(rdi);
+
+    if (!return_barrier) {
+      // Pop return address. If we don't do this, we get a drift,
+      // where the bottom-most frozen frame continuously grows.
+      __ pop(rdi);
+      __ get_thread(rdi);
+    } else {
+      __ movptr(rsp, Address(rthread, JavaThread::cont_entry_offset()));
+    }
+
+#ifdef ASSERT
+    {
+      Label L_good_sp;
+      __ cmpptr(rsp, Address(rthread, JavaThread::cont_entry_offset()));
+      __ jcc(Assembler::equal, L_good_sp);
+      __ stop("Incorrect rsp at thaw entry");
+      __ bind(L_good_sp);
+    }
+#endif
+
+    if (return_barrier) {
+      // Preserve possible return value from a method returning to the return barrier.
+      __ push(rax);
+      __ push_d(xmm0);
+    }
+
+    __ push(return_barrier ? 1 : 0);
+    __ push(rthread);
+    __ call_VM_leaf(CAST_FROM_FN_PTR(address, Continuation::prepare_thaw), 2);
+    __ movptr(rbx, rax); // rax contains the size of the frames to thaw, 0 if overflow or no more frames
+
+    if (return_barrier) {
+      // Restore return value from a method returning to the return barrier.
+      // No safepoint in the call to thaw, so even an oop return value should be OK.
+      __ pop_d(xmm0);
+      __ pop(rax);
+    }
+
+#ifdef ASSERT
+    {
+      Label L_good_sp;
+      __ cmpptr(rsp, Address(rthread, JavaThread::cont_entry_offset()));
+      __ jcc(Assembler::equal, L_good_sp);
+      __ stop("Incorrect rsp after prepare thaw");
+      __ bind(L_good_sp);
+    }
+#endif
+
+    // rbx contains the size of the frames to thaw, 0 if overflow or no more frames
+    Label L_thaw_success;
+    __ testptr(rbx, rbx);
+    __ jccb(Assembler::notZero, L_thaw_success);
+    __ jump(ExternalAddress(StubRoutines::throw_StackOverflowError_entry()));
+    __ bind(L_thaw_success);
+
+    // Make room for the thawed frames and align the stack.
+    __ subptr(rsp, rbx);
+    __ andptr(rsp, -StackAlignmentInBytes);
+
+    if (return_barrier) {
+      // Preserve possible return value from a method returning to the return barrier. (Again.)
+      __ push(rax);
+      __ push_d(xmm0);
+    }
+
+    // If we want, we can templatize thaw by kind, and have three different entries.
+    __ push(kind);
+    __ push(rthread);
+    __ call_VM_leaf(Continuation::thaw_entry(), 2);
+    __ movptr(rbx, rax);
+
+    if (return_barrier) {
+      // Restore return value from a method returning to the return barrier. (Again.)
+      // No safepoint in the call to thaw, so even an oop return value should be OK.
+      __ pop_d(xmm0);
+      __ pop(rax);
+    } else {
+      // Return 0 (success) from doYield.
+      __ xorptr(rax, rax);
+    }
+
+    // After thawing, rbx is the SP of the yielding frame.
+    // Move there, and then to saved RBP slot.
+    __ movptr(rsp, rbx);
+    __ subptr(rsp, 2*wordSize);
+
+    if (return_barrier_exception) {
+      // pull the return address from the stack
+      __ movptr(rbx, Address(rsp, wordSize));
+
+      // rax still holds the original exception oop, save it before the call
+      __ push(rax);
+
+      __ push(rbx);
+
+      __ push(rthread);
+      __ call_VM_leaf(CAST_FROM_FN_PTR(address, SharedRuntime::exception_handler_for_return_address), 2);
+      __ movptr(rbx, rax);
+
+      // Continue at exception handler:
+      //   rax: exception oop
+      //   rbx: exception handler
+      //   rdx: exception pc
+      __ pop(rax);
+      __ verify_oop(rax);
+      __ pop(rbp); // pop out RBP here too
+      __ pop(rdx);
+      __ jmp(rbx);
+    } else {
+      // We are "returning" into the topmost thawed frame; see Thaw::push_return_frame
+      __ pop(rbp);
+      __ ret(0);
+    }
+
+    return start;
   }
 
+  address generate_cont_thaw() {
+    return generate_cont_thaw("Cont thaw", Continuation::thaw_top);
+  }
+
+  // TODO: will probably need multiple return barriers depending on return type
+
   address generate_cont_returnBarrier() {
-    if (!Continuations::enabled()) return nullptr;
-    Unimplemented();
-    return nullptr;
+    return generate_cont_thaw("Cont thaw return barrier", Continuation::thaw_return_barrier);
   }
 
   address generate_cont_returnBarrier_exception() {
-    if (!Continuations::enabled()) return nullptr;
-    Unimplemented();
-    return nullptr;
+    return generate_cont_thaw("Cont thaw return barrier exception", Continuation::thaw_return_barrier_exception);
   }
 
 #if INCLUDE_JFR
+
+#undef __
+#define __ masm->
 
   static void jfr_prologue(address the_pc, MacroAssembler* masm) {
     Register java_thread = rdi;
@@ -4036,30 +4168,50 @@ class StubGenerator: public StubCodeGenerator {
       framesize
     };
 
-    int insts_size = 512;
-    int locs_size = 64;
-    CodeBuffer code("jfr_write_checkpoint", insts_size, locs_size);
-    OopMapSet* oop_maps = new OopMapSet();
+    CodeBuffer code("jfr_write_checkpoint", 512, 64);
     MacroAssembler* masm = new MacroAssembler(&code);
-    MacroAssembler* _masm = masm;
 
     address start = __ pc();
     __ enter();
-    int frame_complete = __ pc() - start;
     address the_pc = __ pc();
-    jfr_prologue(the_pc, _masm);
+
+    int frame_complete = the_pc - start;
+
+    Register java_thread = rdi;
+    __ get_thread(java_thread);
+
+    __ set_last_Java_frame(java_thread, rsp, rbp, the_pc, noreg);
+    __ push(java_thread); // TODO: Just push the thread twice?
+
     __ call_VM_leaf(CAST_FROM_FN_PTR(address, JfrIntrinsicSupport::write_checkpoint), 1);
-    jfr_epilogue(_masm);
+
+    __ get_thread(java_thread);
+    __ reset_last_Java_frame(java_thread, true);
+
+    // rax is jobject handle result, unpack and process it through a barrier.
+    Label L_null_jobject;
+    __ testptr(rax, rax);
+    __ jcc(Assembler::zero, L_null_jobject);
+
+    BarrierSetAssembler* bs = BarrierSet::barrier_set()->barrier_set_assembler();
+    bs->load_at(masm, ACCESS_READ | IN_NATIVE, T_OBJECT, rax, Address(rax, 0), noreg, java_thread);
+
+    __ bind(L_null_jobject);
+
     __ leave();
     __ ret(0);
 
+    OopMapSet* oop_maps = new OopMapSet();
     OopMap* map = new OopMap(framesize, 1); // rbp
-    oop_maps->add_gc_map(the_pc - start, map);
+    oop_maps->add_gc_map(frame_complete, map);
 
-    RuntimeStub* stub = // codeBlob framesize is in words (not VMRegImpl::slot_size)
-      RuntimeStub::new_runtime_stub("jfr_write_checkpoint", &code, frame_complete,
+    RuntimeStub* stub =
+      RuntimeStub::new_runtime_stub(code.name(),
+                                    &code,
+                                    frame_complete,
                                     (framesize >> (LogBytesPerWord - LogBytesPerInt)),
-                                    oop_maps, false);
+                                    oop_maps,
+                                    false);
     return stub;
   }
 

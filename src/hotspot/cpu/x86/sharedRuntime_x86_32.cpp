@@ -25,6 +25,7 @@
 #include "precompiled.hpp"
 #include "asm/macroAssembler.hpp"
 #include "asm/macroAssembler.inline.hpp"
+#include "code/compiledIC.hpp"
 #include "code/debugInfoRec.hpp"
 #include "code/icBuffer.hpp"
 #include "code/nativeInst.hpp"
@@ -39,6 +40,8 @@
 #include "oops/compiledICHolder.hpp"
 #include "oops/klass.inline.hpp"
 #include "prims/methodHandles.hpp"
+#include "runtime/continuation.hpp"
+#include "runtime/continuationEntry.inline.hpp"
 #include "runtime/jniHandles.hpp"
 #include "runtime/safepointMechanism.hpp"
 #include "runtime/sharedRuntime.hpp"
@@ -895,6 +898,8 @@ void SharedRuntime::gen_i2c_adapter(MacroAssembler *masm,
     }
   }
 
+  __ push_cont_fastpath(); // Set JavaThread::_cont_fastpath to the sp of the oldest interpreted frame we know about
+
   // 6243940 We might end up in handle_wrong_method if
   // the callee is deoptimized as we race thru here. If that
   // happens we don't want to take a safepoint because the
@@ -1227,6 +1232,408 @@ static void verify_oop_args(MacroAssembler* masm,
   }
 }
 
+//---------------------------- continuation_enter_setup ---------------------------
+//
+// Arguments:
+//   None.
+//
+// Results:
+//   rsp: pointer to blank ContinuationEntry
+//
+// Kills:
+//   Nothing.
+//
+OopMap* continuation_enter_setup(MacroAssembler* masm, int& stack_slots) {
+  assert(ContinuationEntry::size() % VMRegImpl::stack_slot_size == 0, "");
+  assert(in_bytes(ContinuationEntry::cont_offset())  % VMRegImpl::stack_slot_size == 0, "");
+  assert(in_bytes(ContinuationEntry::chunk_offset()) % VMRegImpl::stack_slot_size == 0, "");
+
+  stack_slots += checked_cast<int>(ContinuationEntry::size()) / wordSize;
+  __ subptr(rsp, checked_cast<int32_t>(ContinuationEntry::size()));
+
+  int frame_size = (checked_cast<int>(ContinuationEntry::size()) + wordSize) / VMRegImpl::stack_slot_size;
+  OopMap* map = new OopMap(frame_size, 0);
+//  ContinuationEntry::setup_oopmap(map);
+
+  Register rscratch = rax;
+  Register rthread = rbx;
+
+  int sp_offset = 8;
+  __ push(rscratch);
+  __ push(rthread);
+
+  __ get_thread(rthread);
+
+  __ movptr(rscratch, Address(rthread, JavaThread::cont_entry_offset()));
+  __ movptr(Address(rsp, ContinuationEntry::parent_offset() + sp_offset), rscratch);
+
+  __ movptr(rscratch, rsp);
+  __ addptr(rscratch, sp_offset);
+  __ movptr(Address(rthread, JavaThread::cont_entry_offset()), rscratch);
+
+  __ pop(rthread);
+  __ pop(rscratch);
+
+  return map;
+}
+
+//---------------------------- fill_continuation_entry ---------------------------
+//
+// Arguments:
+//   rsp: pointer to blank Continuation entry
+//   rax: pointer to the continuation
+//   rcx: flags
+//
+// Results:
+//   rsp: pointer to filled out ContinuationEntry
+//
+// Kills:
+//   Nothing.
+//
+void fill_continuation_entry(MacroAssembler* masm, Register reg_cont, Register reg_flags) {
+  __ verify_oop(reg_cont);
+
+  Register rscratch = rax;
+  if (rscratch == reg_cont || rscratch == reg_flags) {
+    rscratch = rbx;
+  }
+  if (rscratch == reg_cont || rscratch == reg_flags) {
+    rscratch = rcx;
+  }
+  if (rscratch == reg_cont || rscratch == reg_flags) {
+    rscratch = rdx;
+  }
+
+  Register rthread = rax;
+  if (rthread == reg_cont || rthread == reg_flags || rthread == rscratch) {
+    rthread = rbx;
+  }
+  if (rthread == reg_cont || rthread == reg_flags || rthread == rscratch) {
+    rthread = rcx;
+  }
+  if (rthread == reg_cont || rthread == reg_flags || rthread == rscratch) {
+    rthread = rdx;
+  }
+
+  assert_different_registers(reg_cont, reg_flags, rscratch, rthread);
+
+  int sp_offset = 8;
+  __ push(rscratch);
+  __ push(rthread);
+
+  __ get_thread(rthread);
+
+  DEBUG_ONLY(__ movptr(Address(rsp, ContinuationEntry::cookie_offset() + sp_offset), ContinuationEntry::cookie_value());)
+
+  __ movptr(Address(rsp, ContinuationEntry::cont_offset() + sp_offset), reg_cont);
+  __ movl  (Address(rsp, ContinuationEntry::flags_offset() + sp_offset), reg_flags);
+
+  __ movptr(Address(rsp, ContinuationEntry::chunk_offset() + sp_offset), (int32_t)0);
+  __ movl(Address(rsp, ContinuationEntry::argsize_offset() + sp_offset), (int32_t)0);
+  __ movl(Address(rsp, ContinuationEntry::pin_count_offset() + sp_offset), (int32_t)0);
+
+  __ movptr(rscratch, Address(rthread, JavaThread::cont_fastpath_offset()));
+  __ movptr(Address(rsp, ContinuationEntry::parent_cont_fastpath_offset() + sp_offset), rscratch);
+
+  __ movl(rscratch, Address(rthread, JavaThread::held_monitor_count_offset()));
+  __ movl(Address(rsp, ContinuationEntry::parent_held_monitor_count_offset() + sp_offset), rscratch);
+
+  __ movptr(Address(rthread, JavaThread::cont_fastpath_offset()), 0);
+  __ movptr(Address(rthread, JavaThread::held_monitor_count_offset()), 0);
+
+  __ pop(rthread);
+  __ pop(rscratch);
+}
+
+//---------------------------- continuation_enter_cleanup ---------------------------
+//
+// Arguments:
+//   rsp: pointer to the ContinuationEntry
+//
+// Results:
+//   rsp: pointer to the spilled rbp in the entry frame
+//
+// Kills:
+//   Nothing.
+//
+void continuation_enter_cleanup(MacroAssembler* masm) {
+  Register rscratch = rax;
+  Register rthread = rbx;
+
+  int sp_offset = 8;
+  __ push(rscratch);
+  __ push(rthread);
+
+  __ get_thread(rthread);
+
+#ifdef ASSERT
+  Label L_good_sp;
+  __ movptr(rscratch, rsp);
+  __ addptr(rscratch, sp_offset);
+  __ cmpptr(rscratch, Address(rthread, JavaThread::cont_entry_offset()));
+  __ jcc(Assembler::equal, L_good_sp);
+  __ stop("Incorrect rsp at continuation_enter_cleanup");
+  __ bind(L_good_sp);
+#endif
+
+  __ movptr(rscratch, Address(rsp, ContinuationEntry::parent_cont_fastpath_offset() + sp_offset));
+  __ movptr(Address(rthread, JavaThread::cont_fastpath_offset()), rscratch);
+
+  __ movl(rscratch, Address(rsp, ContinuationEntry::parent_held_monitor_count_offset() + sp_offset));
+  __ movl(Address(rthread, JavaThread::held_monitor_count_offset()), rscratch);
+
+  __ movptr(rscratch, Address(rsp, ContinuationEntry::parent_offset() + sp_offset));
+  __ movptr(Address(rthread, JavaThread::cont_entry_offset()), rscratch);
+
+  // Pop these before moving the RSP
+  __ pop(rthread);
+  __ pop(rscratch);
+
+  __ addptr(rsp, (int32_t)ContinuationEntry::size());
+}
+
+static void check_continuation_enter_argument(VMReg actual_vmreg,
+                                              Register expected_reg,
+                                              const char* name) {
+  assert(!actual_vmreg->is_stack(), "%s cannot be on stack", name);
+  assert(actual_vmreg->as_Register() == expected_reg,
+         "%s is in unexpected register: %s instead of %s",
+         name, actual_vmreg->as_Register()->name(), expected_reg->name());
+}
+
+static void gen_continuation_enter(MacroAssembler* masm,
+                                   const VMRegPair* regs,
+                                   int& exception_offset,
+                                   OopMapSet* oop_maps,
+                                   int& frame_complete,
+                                   int& stack_slots,
+                                   int& interpreted_entry_offset,
+                                   int& compiled_entry_offset) {
+
+  // enterSpecial(Continuation c, boolean isContinue, boolean isVirtualThread)
+  int pos_cont_obj   = 0;
+  int pos_is_cont    = 1;
+  int pos_is_virtual = 2;
+
+  // The platform-specific calling convention may present the arguments in various registers.
+  // To simplify the rest of the code, we expect the arguments to reside at these known
+  // registers, and we additionally check the placement here in case calling convention ever
+  // changes.
+  //
+  Register reg_cont_obj   = rcx;
+  Register reg_is_cont    = rdx;
+  Register reg_is_virtual = rbx;
+
+  check_continuation_enter_argument(regs[pos_cont_obj].first(), reg_cont_obj, "Continuation object");
+  check_continuation_enter_argument(regs[pos_is_cont].first(),  reg_is_cont,  "isContinue");
+
+  // Make sure there are no collisions
+  assert_different_registers(reg_cont_obj, reg_is_cont, reg_is_virtual);
+
+  AddressLiteral resolve(SharedRuntime::get_resolve_static_call_stub(),
+                         relocInfo::static_call_type);
+
+  Label L_thaw, L_exit;
+
+  address start = __ pc();
+
+  // i2i entry used at interp_only_mode only
+  interpreted_entry_offset = __ pc() - start;
+  {
+#ifdef ASSERT
+    Register thread = rax;
+    __ push(thread);
+    __ get_thread(thread);
+
+    Label L_is_interp_only;
+    __ cmpb(Address(thread, JavaThread::interp_only_mode_offset()), 0);
+    __ jcc(Assembler::notEqual, L_is_interp_only);
+    __ stop("enterSpecial interpreter entry called when not in interp_only_mode");
+    __ bind(L_is_interp_only);
+
+    __ pop(thread);
+#endif
+
+    __ pop(rax); // return address
+    // Read interpreter arguments into registers (this is an ad-hoc i2c adapter)
+    // TODO: This might be incorrect.
+    __ movptr(reg_cont_obj,   Address(rsp, Interpreter::stackElementSize*2));
+    __ movptr(reg_is_cont,    Address(rsp, Interpreter::stackElementSize*1));
+    __ movptr(reg_is_virtual, Address(rsp, Interpreter::stackElementSize*0));
+    __ andptr(rsp, -StackAlignmentInBytes); // Ensure compiled code always sees stack at proper alignment
+    __ push(rax); // return address
+    __ push_cont_fastpath();
+
+    __ enter();
+
+    stack_slots = 2; // will be adjusted in setup
+    OopMap* map = continuation_enter_setup(masm, stack_slots);
+
+    __ verify_oop(reg_cont_obj);
+
+    fill_continuation_entry(masm, reg_cont_obj, reg_is_virtual);
+
+    // If continuation, call to thaw. Otherwise, resolve the call and exit.
+    __ testptr(reg_is_cont, reg_is_cont);
+    __ jcc(Assembler::notZero, L_thaw);
+
+    // --- Resolve path
+
+    // Make sure the call is patchable
+    __ align(BytesPerWord, __ offset() + NativeCall::displacement_offset);
+    // Emit stub for static call
+    CodeBuffer* cbuf = masm->code_section()->outer();
+    address stub = CompiledStaticCall::emit_to_interp_stub(*cbuf, __ pc());
+    if (stub == nullptr) {
+      fatal("CodeCache is full at gen_continuation_enter");
+    }
+    __ call(resolve);
+    oop_maps->add_gc_map(__ pc() - start, map);
+    __ post_call_nop();
+
+    __ jmp(L_exit);
+  }
+
+  // compiled entry
+  __ align(CodeEntryAlignment);
+  compiled_entry_offset = __ pc() - start;
+
+  __ movptr(reg_is_virtual, Address(rsp, regs[pos_is_virtual].first()->reg2stack() * VMRegImpl::stack_slot_size + wordSize));
+
+  __ enter();
+
+  stack_slots = 2; // will be adjusted in setup
+  OopMap* map = continuation_enter_setup(masm, stack_slots);
+
+  // Frame is now completed as far as size and linkage.
+  frame_complete = __ pc() - start;
+
+  __ verify_oop(reg_cont_obj);
+
+  fill_continuation_entry(masm, reg_cont_obj, reg_is_virtual);
+
+  // If continuation, call to thaw. Otherwise, resolve the call and exit.
+  __ testptr(reg_is_cont, reg_is_cont);
+  __ jccb(Assembler::notZero, L_thaw);
+
+  // --- Resolve path
+
+  // Make sure the call is patchable
+  __ align(BytesPerWord, __ offset() + NativeCall::displacement_offset);
+
+  // Emit stub for static call
+  CodeBuffer* cbuf = masm->code_section()->outer();
+  address stub = CompiledStaticCall::emit_to_interp_stub(*cbuf, __ pc());
+  if (stub == nullptr) {
+    fatal("CodeCache is full at gen_continuation_enter");
+  }
+
+  __ call(resolve);
+
+  oop_maps->add_gc_map(__ pc() - start, map);
+  __ post_call_nop();
+
+  __ jmpb(L_exit);
+
+  // --- Thawing path
+
+  __ bind(L_thaw);
+
+  __ call(RuntimeAddress(StubRoutines::cont_thaw()));
+
+  ContinuationEntry::_return_pc_offset = __ pc() - start;
+  oop_maps->add_gc_map(__ pc() - start, map->deep_copy());
+  __ post_call_nop();
+
+  // --- Normal exit (resolve/thawing)
+
+  __ bind(L_exit);
+
+  continuation_enter_cleanup(masm);
+  __ pop(rbp);
+  __ ret(0);
+
+  // --- Exception handling path
+
+  exception_offset = __ pc() - start;
+
+  continuation_enter_cleanup(masm);
+  __ pop(rbp);
+
+  // pull the return address from the stack
+  __ movptr(rbx, Address(rsp, 0));
+
+  // rax still holds the original exception oop, save it before the call
+  __ push(rax);
+
+  __ push(rbx);
+  __ get_thread(rax);
+  __ push(rax);
+  __ call_VM_leaf(CAST_FROM_FN_PTR(address, SharedRuntime::exception_handler_for_return_address), 2);
+  __ movptr(rbx, rax);
+
+  // Continue at exception handler:
+  //   rax: exception oop
+  //   rbx: exception handler
+  //   rdx: exception pc
+  __ pop(rax);
+  __ verify_oop(rax);
+  __ pop(rdx);
+  __ jmp(rbx);
+}
+
+static void gen_continuation_yield(MacroAssembler* masm,
+                                   const VMRegPair* regs,
+                                   OopMapSet* oop_maps,
+                                   int& frame_complete,
+                                   int& stack_slots,
+                                   int& compiled_entry_offset) {
+  // TODO: Do layout?
+  int framesize = 2; // Equal to doYield_stub_frame_size?
+  stack_slots = framesize /  VMRegImpl::slots_per_word;
+
+  address start = __ pc();
+  compiled_entry_offset = __ pc() - start;
+  __ enter();
+  address the_pc = __ pc();
+
+  frame_complete = the_pc - start;
+
+  // This nop must be exactly at the PC we push into the frame info.
+  // We use this nop for fast CodeBlob lookup, associate the OopMap
+  // with it right away.
+  __ post_call_nop();
+  OopMap* map = new OopMap(framesize, 1);
+  oop_maps->add_gc_map(frame_complete, map);
+
+  Register rthread = rdi;
+  __ get_thread(rthread);
+
+  __ set_last_Java_frame(rthread, rsp, rbp, the_pc, noreg);
+  __ push(rsp);
+  __ push(rthread); // TODO: Just push the thread twice?
+  __ call_VM_leaf(Continuation::freeze_entry(), 2);
+  __ get_thread(rthread);
+  __ reset_last_Java_frame(rthread, true);
+
+  Label L_pinned;
+
+  __ testptr(rax, rax);
+  __ jcc(Assembler::notZero, L_pinned);
+
+  __ movptr(rsp, Address(rthread, JavaThread::cont_entry_offset()));
+  continuation_enter_cleanup(masm);
+  __ pop(rbp);
+  __ ret(0);
+
+  __ bind(L_pinned);
+
+  // Pinned, return to caller
+  __ leave();
+  __ ret(0);
+}
+
+
 static void gen_special_dispatch(MacroAssembler* masm,
                                  const methodHandle& method,
                                  const BasicType* sig_bt,
@@ -1309,6 +1716,65 @@ nmethod* SharedRuntime::generate_native_wrapper(MacroAssembler* masm,
                                                 BasicType* in_sig_bt,
                                                 VMRegPair* in_regs,
                                                 BasicType ret_type) {
+  if (method->is_continuation_native_intrinsic()) {
+    int exception_offset = -1;
+    OopMapSet* oop_maps = new OopMapSet();
+    int frame_complete = -1;
+    int stack_slots = -1;
+    int interpreted_entry_offset = -1;
+    int vep_offset = -1;
+    if (method->is_continuation_enter_intrinsic()) {
+      gen_continuation_enter(masm,
+                             in_regs,
+                             exception_offset,
+                             oop_maps,
+                             frame_complete,
+                             stack_slots,
+                             interpreted_entry_offset,
+                             vep_offset);
+    } else if (method->is_continuation_yield_intrinsic()) {
+      gen_continuation_yield(masm,
+                             in_regs,
+                             oop_maps,
+                             frame_complete,
+                             stack_slots,
+                             vep_offset);
+    } else {
+      guarantee(false, "Unknown Continuation native intrinsic");
+    }
+
+#ifdef ASSERT
+    if (method->is_continuation_enter_intrinsic()) {
+      assert(interpreted_entry_offset != -1, "Must be set");
+      assert(exception_offset != -1,         "Must be set");
+    } else {
+      assert(interpreted_entry_offset == -1, "Must be unset");
+      assert(exception_offset == -1,         "Must be unset");
+    }
+    assert(frame_complete != -1,    "Must be set");
+    assert(stack_slots != -1,       "Must be set");
+    assert(vep_offset != -1,        "Must be set");
+#endif
+
+    __ flush();
+    nmethod* nm = nmethod::new_native_nmethod(method,
+                                              compile_id,
+                                              masm->code(),
+                                              vep_offset,
+                                              frame_complete,
+                                              stack_slots,
+                                              in_ByteSize(-1),
+                                              in_ByteSize(-1),
+                                              oop_maps,
+                                              exception_offset);
+    if (method->is_continuation_enter_intrinsic()) {
+      ContinuationEntry::set_enter_code(nm, interpreted_entry_offset);
+    } else if (method->is_continuation_yield_intrinsic()) {
+      _cont_doYield_stub = nm;
+    }
+    return nm;
+  }
+
   if (method->is_method_handle_intrinsic()) {
     vmIntrinsics::ID iid = method->intrinsic_id();
     intptr_t start = (intptr_t)__ pc();
@@ -2778,7 +3244,7 @@ RuntimeStub* SharedRuntime::generate_resolve_blob(address destination, const cha
   int frame_complete = __ offset();
 
   const Register thread = rdi;
-  __ get_thread(rdi);
+  __ get_thread(thread);
 
   __ push(thread);
   __ set_last_Java_frame(thread, noreg, rbp, NULL, noreg);
@@ -2795,6 +3261,8 @@ RuntimeStub* SharedRuntime::generate_resolve_blob(address destination, const cha
   // rax, contains the address we are going to jump to assuming no exception got installed
 
   __ addptr(rsp, wordSize);
+
+  __ get_thread(thread);
 
   // clear last_Java_sp
   __ reset_last_Java_frame(thread, true);

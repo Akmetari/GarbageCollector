@@ -21,19 +21,27 @@
 * questions.
 */
 
-/**
-* @test
-* @summary Tests class unloading on virtual threads
-*
-* @requires vm.continuations
-* @enablePreview
-* @compile ClassUnloading.java
-* @run main/othervm -XX:-UseCompressedOops ClassUnloading
-* @run main/othervm -XX:+UseCompressedOops ClassUnloading
-* @run main/othervm -Xcomp -XX:-TieredCompilation -XX:CompileOnly=jdk/internal/vm/Continuation,ClassUnloading ClassUnloading
+/*
+ * @test
+ * @summary Tests class unloading on virtual threads
+ * @enablePreview
+ * @compile ClassUnloading.java
+ * @requires vm.continuations
+ *
+ * @run main/othervm -Xcomp -XX:-TieredCompilation -XX:CompileOnly=jdk/internal/vm/Continuation,ClassUnloading ClassUnloading
 */
 
-// @run testng/othervm -Xcomp -XX:-TieredCompilation -XX:CompileOnly=jdk/internal/vm/Continuation,Basic Basic
+/*
+ * @test
+ * @requires vm.bits == 64
+ * @summary Tests class unloading on virtual threads
+ * @enablePreview
+ * @compile ClassUnloading.java
+ * @requires vm.continuations
+ *
+ * @run main/othervm -XX:-UseCompressedOops ClassUnloading
+ * @run main/othervm -XX:+UseCompressedOops ClassUnloading
+ */
 
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodHandles.Lookup;

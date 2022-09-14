@@ -523,6 +523,8 @@ public:
 };
 
 bool stackChunkOopDesc::verify(size_t* out_size, int* out_oops, int* out_frames, int* out_interpreted_frames) {
+  ResourceMark rm;
+
   DEBUG_ONLY(if (!VerifyContinuations) return true;)
 
   assert(oopDesc::is_oop(this), "");
@@ -537,6 +539,43 @@ bool stackChunkOopDesc::verify(size_t* out_size, int* out_oops, int* out_frames,
   }
 
   assert(oopDesc::is_oop_or_null(parent()), "");
+
+  if (is_gc_mode()) {
+    // Check all structures in heap chunk are within the heap object.
+    // This is important for GC to work with them correctly.
+
+    size_t plain_size = size();
+    size_t slow_size = InstanceStackChunkKlass::cast(klass())->oop_size(this);
+    assert(plain_size == slow_size,
+           "Sanity: " SIZE_FORMAT ", " SIZE_FORMAT,
+           plain_size, slow_size);
+
+    intptr_t obj_start = p2i(this);
+    intptr_t obj_end = obj_start + (plain_size << LogHeapWordSize);
+
+    intptr_t stack_start = p2i(start_of_stack());
+    intptr_t stack_end = stack_start + (stack_size() << LogHeapWordSize);
+    intptr_t bitmap_start = stack_end;
+    intptr_t bitmap_end = bitmap_start + bitmap().size_in_bytes();
+
+    // TODO: Should it be "obj_start == stack_start"?
+    assert(obj_start <= stack_start && stack_start < obj_end,
+           "Sanity: " INTPTR_FORMAT " <= " INTPTR_FORMAT " < " INTPTR_FORMAT,
+           obj_start, stack_start, obj_end);
+
+    assert(obj_start < stack_end    && stack_end < obj_end,
+           "Sanity: " INTPTR_FORMAT " < " INTPTR_FORMAT " < " INTPTR_FORMAT,
+           obj_start, stack_end, obj_end);
+
+    assert(obj_start < bitmap_start && bitmap_start < obj_end,
+           "Sanity: " INTPTR_FORMAT " < " INTPTR_FORMAT " < " INTPTR_FORMAT,
+           obj_start, bitmap_start, obj_end);
+
+    // TODO: Should it be "bitmap_end == obj_end"?
+    assert(obj_start < bitmap_end   && bitmap_end <= obj_end,
+           "Sanity: " INTPTR_FORMAT " < " INTPTR_FORMAT " <= " INTPTR_FORMAT,
+           obj_start, bitmap_end, obj_end);
+  }
 
   const bool concurrent = !Thread::current()->is_Java_thread();
 

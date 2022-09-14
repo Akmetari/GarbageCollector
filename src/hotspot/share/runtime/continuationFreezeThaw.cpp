@@ -468,12 +468,10 @@ FreezeBase::FreezeBase(JavaThread* thread, ContinuationWrapper& cont, intptr_t* 
   assert(!Interpreter::contains(_cont.entryPC()), "");
 
   _bottom_address = _cont.entrySP() - _cont.entry_frame_extension();
-#ifdef _LP64
-  if (((intptr_t)_bottom_address & 0xf) != 0) {
-    _bottom_address--;
+  if (!is_aligned(_bottom_address, frame::frame_alignment)) {
+    _bottom_address = align_down(_bottom_address, frame::frame_alignment);
   }
   assert(is_aligned(_bottom_address, frame::frame_alignment), "");
-#endif
 
   log_develop_trace(continuations)("bottom_address: " INTPTR_FORMAT " entrySP: " INTPTR_FORMAT " argsize: " PTR_FORMAT,
                 p2i(_bottom_address), p2i(_cont.entrySP()), (_cont.entrySP() - _bottom_address) << LogBytesPerWord);
@@ -1954,6 +1952,8 @@ inline bool ThawBase::seen_by_gc() {
 }
 
 NOINLINE intptr_t* ThawBase::thaw_slow(stackChunkOop chunk, bool return_barrier) {
+  ResourceMark rm; // Can allocate stuff in resource arena for OopMapCache::compute_one_oop_map.
+
   LogTarget(Trace, continuations) lt;
   if (lt.develop_is_enabled()) {
     LogStream ls(lt);
@@ -2216,9 +2216,9 @@ void ThawBase::recurse_thaw_compiled_frame(const frame& hf, frame& caller, int n
   // copy metadata, except the metadata at the top of the (unextended) entry frame
   int sz = fsize + frame::metadata_words_at_bottom + (is_bottom_frame && added_argsize == 0 ? 0 : frame::metadata_words_at_top);
 
-  // If we're the bottom-most thawed frame, we're writing to within one word from entrySP
-  // (we might have one padding word for alignment)
-  assert(!is_bottom_frame || (_cont.entrySP() - 1 <= to + sz && to + sz <= _cont.entrySP()), "");
+  // If we're the bottom-most thawed frame, we're writing to within a few words from entrySP
+  // (we might have the padding words for alignment)
+  assert(!is_bottom_frame || (_cont.entrySP() - frame::align_wiggle <= to + sz && to + sz <= _cont.entrySP()), "");
   assert(!is_bottom_frame || hf.compiled_frame_stack_argsize() != 0 || (to + sz && to + sz == _cont.entrySP()), "");
 
   copy_from_chunk(from, to, sz); // copying good oops because we invoked barriers above
@@ -2325,6 +2325,8 @@ void ThawBase::finish_thaw(frame& f) {
     assert(f.is_interpreted_frame(), "");
     f.set_sp(align_down(f.sp(), frame::frame_alignment));
   }
+  assert(is_aligned(f.sp(), frame::frame_alignment), "");
+
   push_return_frame(f);
   chunk->fix_thawed_frame(f, SmallRegisterMap::instance); // can only fix caller after push_return_frame (due to callee saved regs)
 

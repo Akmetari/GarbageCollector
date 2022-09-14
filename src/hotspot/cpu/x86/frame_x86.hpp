@@ -108,7 +108,11 @@
     // to be reserved for callee functions in the runtime
     frame_alignment                                  = 16,
     // size, in words, of maximum shift in frame position due to alignment
+#ifdef AMD64
     align_wiggle                                     =  1
+#else
+    align_wiggle                                     =  3
+#endif // AMD64
   };
 
   intptr_t ptr_at(int offset) const {

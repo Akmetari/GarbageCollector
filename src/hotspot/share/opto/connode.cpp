@@ -65,3 +65,22 @@ ConNode *ConNode::make(const Type *t) {
     return NULL;
   }
 }
+
+uint ThreadLocalNode::hash() const {
+#ifdef IA32
+  // If we allow to fold the similarly-looking TLS load nodes, then we might
+  // perform the fold over the continuation yield point where thread would change.
+  // This would not be a problem for architectures that carry the thread in
+  // known thread register: the register would be updated separately.
+  //
+  // But on architectures where we have the TLS loads into adhoc registers,
+  // this would break. Notably, it would break TLAB allocations which might
+  // allocate in "other" thread TLABs all of the sudden. The only affected
+  // architecture affected by this is x86_32.
+  //
+  // The easiest way to avoid this folding is to forbid node hashing.
+  return NO_HASH;
+#else
+  return Node::hash();
+#endif
+}
