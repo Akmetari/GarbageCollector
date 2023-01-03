@@ -194,7 +194,10 @@ class IdealKit: public StackObj {
   Node* CmpL(Node* l, Node* r) { return transform(new CmpLNode(l, r)); }
 
   // TLS
-  Node* thread()  {  return gvn().transform(new ThreadLocalNode()); }
+  Node* thread()  {
+    Node* thread = gvn().transform(new ThreadLocalNode(ctrl()));
+    return thread;
+  }
 
   // Pointers
 

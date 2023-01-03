@@ -43,7 +43,7 @@ void GraphKit::make_dtrace_method_entry_exit(ciMethod* method, bool is_entry) {
   const char     *call_name    = is_entry ? "dtrace_method_entry" : "dtrace_method_exit";
 
   // Get base of thread-local storage area
-  Node* thread = _gvn.transform( new ThreadLocalNode() );
+  Node* thread = _gvn.transform( new ThreadLocalNode(control()) );
 
   // Get method
   const TypePtr* method_type = TypeMetadataPtr::make(method);

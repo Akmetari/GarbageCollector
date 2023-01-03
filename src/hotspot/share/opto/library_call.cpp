@@ -920,7 +920,9 @@ Node* LibraryCallKit::current_thread_helper(Node*& tls_output, ByteSize handle_o
   const Type* thread_type
     = TypeOopPtr::make_from_klass(thread_klass)->cast_to_ptr_type(TypePtr::NotNull);
 
-  Node* thread = _gvn.transform(new ThreadLocalNode());
+  // FIXME: NULL control, really? Passing control() makes graph unschedulable.
+  Node* thread = _gvn.transform(new ThreadLocalNode(NULL));
+
   Node* p = basic_plus_adr(top()/*!oop*/, thread, in_bytes(handle_offset));
   tls_output = thread;
 
@@ -2952,7 +2954,7 @@ bool LibraryCallKit::inline_native_getEventWriter() {
   Node* epoch_mask = _gvn.intcon(32767);
 
   // TLS
-  Node* tls_ptr = _gvn.transform(new ThreadLocalNode());
+  Node* tls_ptr = _gvn.transform(new ThreadLocalNode(control()));
 
   // Load the address of java event writer jobject handle from the jfr_thread_local structure.
   Node* jobj_ptr = basic_plus_adr(top(), tls_ptr, in_bytes(THREAD_LOCAL_WRITER_OFFSET_JFR));
@@ -3344,7 +3346,7 @@ bool LibraryCallKit::inline_native_setCurrentThread() {
   assert(C->method()->changes_current_thread(),
          "method changes current Thread but is not annotated ChangesCurrentThread");
   Node* arr = argument(1);
-  Node* thread = _gvn.transform(new ThreadLocalNode());
+  Node* thread = _gvn.transform(new ThreadLocalNode(control()));
   Node* p = basic_plus_adr(top()/*!oop*/, thread, in_bytes(JavaThread::vthread_offset()));
   Node* thread_obj_handle
     = make_load(NULL, p, p->bottom_type()->is_ptr(), T_OBJECT, MemNode::unordered);
@@ -3363,7 +3365,7 @@ Node* LibraryCallKit::scopedValueCache_helper() {
 
   bool xk = etype->klass_is_exact();
 
-  Node* thread = _gvn.transform(new ThreadLocalNode());
+  Node* thread = _gvn.transform(new ThreadLocalNode(control()));
   Node* p = basic_plus_adr(top()/*!oop*/, thread, in_bytes(JavaThread::scopedValueCache_offset()));
   // We cannot use immutable_memory() because we might flip onto a
   // different carrier thread, at which point we'll need to use that
@@ -4609,7 +4611,8 @@ bool LibraryCallKit::inline_unsafe_copyMemory() {
   Node* src_addr = make_unsafe_address(src_base, src_off);
   Node* dst_addr = make_unsafe_address(dst_base, dst_off);
 
-  Node* thread = _gvn.transform(new ThreadLocalNode());
+  Node* thread = _gvn.transform(new ThreadLocalNode(control()));
+
   Node* doing_unsafe_access_addr = basic_plus_adr(top(), thread, in_bytes(JavaThread::doing_unsafe_access_offset()));
   BasicType doing_unsafe_access_bt = T_BYTE;
   assert((sizeof(bool) * CHAR_BIT) == 8, "not implemented");

@@ -85,7 +85,7 @@ void GraphKit::gen_stub(address C_function,
   set_all_memory(map()->memory());
 
   // Get base of thread-local storage area
-  Node* thread = _gvn.transform(new ThreadLocalNode());
+  Node* thread = _gvn.transform(new ThreadLocalNode(control()));
 
   const int NoAlias = Compile::AliasIdxBot;
 

@@ -143,11 +143,12 @@ public:
 // Ideal Node which returns the base of ThreadLocalStorage.
 class ThreadLocalNode : public Node {
 public:
-    ThreadLocalNode( ) : Node((Node*)Compile::current()->root()) {}
+    ThreadLocalNode(Node* ctrl);
     virtual int Opcode() const;
     virtual const Type *bottom_type() const { return TypeRawPtr::BOTTOM;}
     virtual uint ideal_reg() const { return Op_RegP; }
     virtual uint hash() const;
+    virtual bool pinned() const;
 };
 
 

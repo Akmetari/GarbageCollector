@@ -868,7 +868,7 @@ void ShenandoahBarrierC2Support::test_gc_state(Node*& ctrl, Node* raw_mem, Node*
   PhaseIterGVN& igvn = phase->igvn();
   Node* old_ctrl = ctrl;
 
-  Node* thread          = new ThreadLocalNode();
+  Node* thread          = new ThreadLocalNode(ctrl);
   Node* gc_state_offset = igvn.MakeConX(in_bytes(ShenandoahThreadLocalData::gc_state_offset()));
   Node* gc_state_addr   = new AddPNode(phase->C->top(), thread, gc_state_offset);
   Node* gc_state        = new LoadBNode(old_ctrl, raw_mem, gc_state_addr,
@@ -1499,7 +1499,7 @@ void ShenandoahBarrierC2Support::pin_and_expand(PhaseIdealLoop* phase) {
 
     const int index_offset = in_bytes(ShenandoahThreadLocalData::satb_mark_queue_index_offset());
     const int buffer_offset = in_bytes(ShenandoahThreadLocalData::satb_mark_queue_buffer_offset());
-    Node* thread = new ThreadLocalNode();
+    Node* thread = new ThreadLocalNode(ctrl);
     phase->register_new_node(thread, ctrl);
     Node* buffer_adr = new AddPNode(phase->C->top(), thread, phase->igvn().MakeConX(buffer_offset));
     phase->register_new_node(buffer_adr, ctrl);

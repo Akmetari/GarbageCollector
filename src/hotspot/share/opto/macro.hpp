@@ -224,7 +224,7 @@ public:
   Node* zerocon(BasicType bt)   const { return _igvn.zerocon(bt); }
   Node* top()                   const { return C->top(); }
 
-  Node* prefetch_allocation(Node* i_o,
+  Node* prefetch_allocation(Node* ctrl, Node* i_o,
                             Node*& needgc_false, Node*& contended_phi_rawmem,
                             Node* old_eden_top, Node* new_eden_top,
                             intx lines);

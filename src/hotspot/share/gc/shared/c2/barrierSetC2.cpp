@@ -695,13 +695,13 @@ void BarrierSetC2::clone(GraphKit* kit, Node* src_base, Node* dst_base, Node* si
   }
 }
 
-Node* BarrierSetC2::obj_allocate(PhaseMacroExpand* macro, Node* mem, Node* toobig_false, Node* size_in_bytes,
+Node* BarrierSetC2::obj_allocate(PhaseMacroExpand* macro, Node* ctrl, Node* mem, Node* toobig_false, Node* size_in_bytes,
                                  Node*& i_o, Node*& needgc_ctrl,
                                  Node*& fast_oop_ctrl, Node*& fast_oop_rawmem,
                                  intx prefetch_lines) const {
   assert(UseTLAB, "Only for TLAB enabled allocations");
 
-  Node* thread = macro->transform_later(new ThreadLocalNode());
+  Node* thread = macro->transform_later(new ThreadLocalNode(ctrl));
   Node* tlab_top_adr = macro->basic_plus_adr(macro->top()/*not oop*/, thread, in_bytes(JavaThread::tlab_top_offset()));
   Node* tlab_end_adr = macro->basic_plus_adr(macro->top()/*not oop*/, thread, in_bytes(JavaThread::tlab_end_offset()));
 
@@ -744,7 +744,7 @@ Node* BarrierSetC2::obj_allocate(PhaseMacroExpand* macro, Node* mem, Node* toobi
   macro->transform_later(needgc_false);
 
   // Fast path:
-  i_o = macro->prefetch_allocation(i_o, needgc_false, mem,
+  i_o = macro->prefetch_allocation(ctrl, i_o, needgc_false, mem,
                                    old_tlab_top, new_tlab_top, prefetch_lines);
 
   // Store the modified TLAB top back down.

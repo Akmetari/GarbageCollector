@@ -506,7 +506,7 @@ void GraphKit::uncommon_trap_if_should_post_on_exceptions(Deoptimization::DeoptR
     // take the uncommon_trap in the BuildCutout below.
 
     // first must access the should_post_on_exceptions_flag in this thread's JavaThread
-    Node* jthread = _gvn.transform(new ThreadLocalNode());
+    Node* jthread = _gvn.transform(new ThreadLocalNode(control()));
     Node* adr = basic_plus_adr(top(), jthread, in_bytes(JavaThread::should_post_on_exceptions_flag_offset()));
     Node* should_post_flag = make_load(control(), adr, TypeInt::INT, T_INT, Compile::AliasIdxRaw, MemNode::unordered);
 
@@ -2947,8 +2947,7 @@ void GraphKit::guard_init_thread(Node* klass) {
                                      T_ADDRESS, MemNode::unordered);
   init_thread = _gvn.transform(init_thread);
 
-  Node* cur_thread = _gvn.transform(new ThreadLocalNode());
-
+  Node* cur_thread = _gvn.transform(new ThreadLocalNode(control()));
   Node* chk = _gvn.transform(new CmpPNode(cur_thread, init_thread));
   Node* tst = _gvn.transform(new BoolNode(chk, BoolTest::eq));
 

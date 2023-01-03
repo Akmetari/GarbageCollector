@@ -1319,7 +1319,7 @@ void PhaseMacroExpand::expand_allocate_common(
 
       intx prefetch_lines = length != NULL ? AllocatePrefetchLines : AllocateInstancePrefetchLines;
       BarrierSetC2* bs = BarrierSet::barrier_set()->barrier_set_c2();
-      Node* fast_oop = bs->obj_allocate(this, mem, toobig_false, size_in_bytes, i_o, needgc_ctrl,
+      Node* fast_oop = bs->obj_allocate(this, ctrl, mem, toobig_false, size_in_bytes, i_o, needgc_ctrl,
                                         fast_oop_ctrl, fast_oop_rawmem,
                                         prefetch_lines);
 
@@ -1628,7 +1628,7 @@ void PhaseMacroExpand::expand_dtrace_alloc_probe(AllocateNode* alloc, Node* oop,
                                           TypeRawPtr::BOTTOM);
 
     // Get base of thread-local storage area
-    Node* thread = new ThreadLocalNode();
+    Node* thread = new ThreadLocalNode(ctrl);
     transform_later(thread);
 
     call->init_req(TypeFunc::Parms + 0, thread);
@@ -1712,7 +1712,7 @@ PhaseMacroExpand::initialize_object(AllocateNode* alloc,
 }
 
 // Generate prefetch instructions for next allocations.
-Node* PhaseMacroExpand::prefetch_allocation(Node* i_o, Node*& needgc_false,
+Node* PhaseMacroExpand::prefetch_allocation(Node* ctrl, Node* i_o, Node*& needgc_false,
                                         Node*& contended_phi_rawmem,
                                         Node* old_eden_top, Node* new_eden_top,
                                         intx lines) {
@@ -1728,7 +1728,8 @@ Node* PhaseMacroExpand::prefetch_allocation(Node* i_o, Node*& needgc_false,
       // I/O is used for Prefetch
       Node *pf_phi_abio = new PhiNode( pf_region, Type::ABIO );
 
-      Node *thread = new ThreadLocalNode();
+      ThreadLocalNode* thread = new ThreadLocalNode(ctrl);
+
       transform_later(thread);
 
       Node *eden_pf_adr = new AddPNode( top()/*not oop*/, thread,
@@ -2225,7 +2226,8 @@ void PhaseMacroExpand::expand_unlock_node(UnlockNode *unlock) {
   funlock = transform_later( funlock )->as_FastUnlock();
   // Optimize test; set region slot 2
   Node *slow_path = opt_bits_test(ctrl, region, 2, funlock, 0, 0);
-  Node *thread = transform_later(new ThreadLocalNode());
+
+  Node *thread = transform_later(new ThreadLocalNode(ctrl));
 
   CallNode *call = make_slow_call((CallNode *) unlock, OptoRuntime::complete_monitor_exit_Type(),
                                   CAST_FROM_FN_PTR(address, SharedRuntime::complete_monitor_unlocking_C),

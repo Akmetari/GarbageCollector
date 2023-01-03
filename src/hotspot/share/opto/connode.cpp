@@ -66,6 +66,18 @@ ConNode *ConNode::make(const Type *t) {
   }
 }
 
+ThreadLocalNode::ThreadLocalNode(Node* ctrl) : Node(1) {
+#ifdef IA32
+  if (ctrl != nullptr) {
+    init_req(0, ctrl);
+  } else {
+    init_req(0, (Node*)Compile::current()->root());
+  }
+#else
+  init_req(0, (Node*)Compile::current()->root());
+#endif
+}
+
 uint ThreadLocalNode::hash() const {
 #ifdef IA32
   // If we allow to fold the similarly-looking TLS load nodes, then we might
@@ -82,5 +94,14 @@ uint ThreadLocalNode::hash() const {
   return NO_HASH;
 #else
   return Node::hash();
+#endif
+}
+
+bool ThreadLocalNode::pinned() const {
+#ifdef IA32
+  // For the same reason as above.
+  return true;
+#else
+  return false;
 #endif
 }
