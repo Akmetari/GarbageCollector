@@ -256,9 +256,9 @@ void LIRGenerator::increment_counter(address counter, BasicType type, int step) 
 
 void LIRGenerator::increment_counter(LIR_Address* addr, int step) {
   if (UseNewCode) {
-    LIR_Opr result = new_register(T_ADDRESS);
+    LIR_Opr result = new_pointer_register();
     // Because we want a 2-arg form of xchg and xadd
-    __ move(LIR_OprFact::intptrConst(1), result);
+    __ move(LIR_OprFact::intptrConst(step), result);
     __ xadd(addr, result, result, LIR_OprFact::illegalOpr);
   } else {
     __ add((LIR_Opr) addr, LIR_OprFact::intConst(step), (LIR_Opr) addr);
