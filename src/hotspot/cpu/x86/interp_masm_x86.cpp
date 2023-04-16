@@ -1459,16 +1459,24 @@ void InterpreterMacroAssembler::increment_mdp_data_at(Address data,
     addptr(data, -DataLayout::counter_increment);
     // If the decrement causes the counter to overflow, stay negative
     Label L;
-    jcc(Assembler::negative, L);
+    jccb(Assembler::negative, L);
+    if (UseNewCode) lock();
     addptr(data, DataLayout::counter_increment);
     bind(L);
   } else {
     assert(DataLayout::counter_increment == 1,
            "flow-free idiom only works with 1");
     // Increment the register.  Set carry flag.
+    if (UseNewCode) lock();
     addptr(data, DataLayout::counter_increment);
-    // If the increment causes the counter to overflow, pull back by 1.
-    sbbptr(data, 0);
+    if (!UseNewCode2) {
+      sbbptr(data, 0);
+    } else {
+#ifndef _LP64
+      // If the increment causes the counter to overflow, pull back by 1.
+      sbbptr(data, 0);
+#endif
+    }
   }
 }
 
@@ -1560,12 +1568,10 @@ void InterpreterMacroAssembler::profile_taken_branch(Register mdp,
     // We inline increment_mdp_data_at to return bumped_count in a register
     //increment_mdp_data_at(mdp, in_bytes(JumpData::taken_offset()));
     Address data(mdp, in_bytes(JumpData::taken_offset()));
-    movptr(bumped_count, data);
     assert(DataLayout::counter_increment == 1,
             "flow-free idiom only works with 1");
-    addptr(bumped_count, DataLayout::counter_increment);
-    sbbptr(bumped_count, 0);
-    movptr(data, bumped_count); // Store back out
+    if (UseNewCode) lock();
+    addptr(data, DataLayout::counter_increment);
 
     // The method data pointer needs to be updated to reflect the new target.
     update_mdp_by_offset(mdp, in_bytes(JumpData::displacement_offset()));

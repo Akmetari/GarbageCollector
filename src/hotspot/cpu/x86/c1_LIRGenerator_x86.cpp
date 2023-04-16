@@ -255,7 +255,14 @@ void LIRGenerator::increment_counter(address counter, BasicType type, int step) 
 
 
 void LIRGenerator::increment_counter(LIR_Address* addr, int step) {
-  __ add((LIR_Opr)addr, LIR_OprFact::intConst(step), (LIR_Opr)addr);
+  if (UseNewCode) {
+    LIR_Opr result = new_register(T_ADDRESS);
+    // Because we want a 2-arg form of xchg and xadd
+    __ move(LIR_OprFact::intptrConst(1), result);
+    __ xadd(addr, result, result, LIR_OprFact::illegalOpr);
+  } else {
+    __ add((LIR_Opr) addr, LIR_OprFact::intConst(step), (LIR_Opr) addr);
+  }
 }
 
 void LIRGenerator::cmp_mem_int(LIR_Condition condition, LIR_Opr base, int disp, int c, CodeEmitInfo* info) {

@@ -1652,6 +1652,7 @@ void LIR_Assembler::type_profile_helper(Register mdo,
     __ cmpptr(recv, Address(mdo, md->byte_offset_of_slot(data, ReceiverTypeData::receiver_offset(i))));
     __ jccb(Assembler::notEqual, next_test);
     Address data_addr(mdo, md->byte_offset_of_slot(data, ReceiverTypeData::receiver_count_offset(i)));
+    if (UseNewCode) __ lock();
     __ addptr(data_addr, DataLayout::counter_increment);
     __ jmp(*update_done);
     __ bind(next_test);
@@ -1822,6 +1823,7 @@ void LIR_Assembler::emit_typecheck_helper(LIR_OpTypeCheck *op, Label* success, L
     __ bind(profile_cast_failure);
     __ mov_metadata(mdo, md->constant_encoding());
     Address counter_addr(mdo, md->byte_offset_of_slot(data, CounterData::count_offset()));
+    if (UseNewCode) __ lock();
     __ subptr(counter_addr, DataLayout::counter_increment);
     __ jmp(*failure);
   }
@@ -1905,6 +1907,7 @@ void LIR_Assembler::emit_opTypeCheck(LIR_OpTypeCheck* op) {
       __ bind(profile_cast_failure);
       __ mov_metadata(mdo, md->constant_encoding());
       Address counter_addr(mdo, md->byte_offset_of_slot(data, CounterData::count_offset()));
+      if (UseNewCode) __ lock();
       __ subptr(counter_addr, DataLayout::counter_increment);
       __ jmp(*stub->entry());
     }
@@ -3577,6 +3580,7 @@ void LIR_Assembler::emit_profile_call(LIR_OpProfileCall* op) {
         ciKlass* receiver = vc_data->receiver(i);
         if (known_klass->equals(receiver)) {
           Address data_addr(mdo, md->byte_offset_of_slot(data, VirtualCallData::receiver_count_offset(i)));
+          if (UseNewCode) __ lock();
           __ addptr(data_addr, DataLayout::counter_increment);
           return;
         }
@@ -3593,6 +3597,7 @@ void LIR_Assembler::emit_profile_call(LIR_OpProfileCall* op) {
           Address recv_addr(mdo, md->byte_offset_of_slot(data, VirtualCallData::receiver_offset(i)));
           __ mov_metadata(recv_addr, known_klass->constant_encoding(), rscratch1);
           Address data_addr(mdo, md->byte_offset_of_slot(data, VirtualCallData::receiver_count_offset(i)));
+          if (UseNewCode) __ lock();
           __ addptr(data_addr, DataLayout::counter_increment);
           return;
         }
@@ -3603,12 +3608,14 @@ void LIR_Assembler::emit_profile_call(LIR_OpProfileCall* op) {
       type_profile_helper(mdo, md, data, recv, &update_done);
       // Receiver did not match any saved receiver and there is no empty row for it.
       // Increment total counter to indicate polymorphic case.
+      if (UseNewCode) __ lock();
       __ addptr(counter_addr, DataLayout::counter_increment);
 
       __ bind(update_done);
     }
   } else {
     // Static call
+    if (UseNewCode) __ lock();
     __ addptr(counter_addr, DataLayout::counter_increment);
   }
 }
