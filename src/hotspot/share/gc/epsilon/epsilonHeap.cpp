@@ -361,9 +361,10 @@ void EpsilonHeap::print_heap_info(size_t used) const {
                  SIZE_FORMAT "%s (%.2f%%) used",
             byte_size_in_proper_unit(reserved),  proper_unit_for_byte_size(reserved),
             byte_size_in_proper_unit(committed), proper_unit_for_byte_size(committed),
-            committed * 100.0 / reserved,
+            percent_of(committed, reserved),
             byte_size_in_proper_unit(used),      proper_unit_for_byte_size(used),
-            used * 100.0 / reserved);
+            percent_of(used, reserved)
+    );
   } else {
     log_info(gc)("Heap: no reliable data");
   }
@@ -380,9 +381,10 @@ void EpsilonHeap::print_metaspace_info() const {
                             SIZE_FORMAT "%s (%.2f%%) used",
             byte_size_in_proper_unit(reserved),  proper_unit_for_byte_size(reserved),
             byte_size_in_proper_unit(committed), proper_unit_for_byte_size(committed),
-            committed * 100.0 / reserved,
+            percent_of(committed, reserved),
             byte_size_in_proper_unit(used),      proper_unit_for_byte_size(used),
-            used * 100.0 / reserved);
+            percent_of(used, reserved)
+    );
   } else {
     log_info(gc, metaspace)("Metaspace: no reliable data");
   }
@@ -848,10 +850,11 @@ void EpsilonHeap::entry_collect(GCCause::Cause cause) {
   size_t stat_reachable = stat_reachable_roots + stat_reachable_heap;
   log_info(gc)("GC Stats: " SIZE_FORMAT " (%.2f%%) reachable from roots, " SIZE_FORMAT " (%.2f%%) reachable from heap, "
                SIZE_FORMAT " (%.2f%%) moved, " SIZE_FORMAT " (%.2f%%) markwords preserved",
-               stat_reachable_roots, 100.0 * stat_reachable_roots / stat_reachable,
-               stat_reachable_heap,  100.0 * stat_reachable_heap  / stat_reachable,
-               stat_moved,           100.0 * stat_moved           / stat_reachable,
-               stat_preserved_marks, 100.0 * stat_preserved_marks / stat_reachable);
+               stat_reachable_roots, percent_of(stat_reachable_roots, stat_reachable),
+               stat_reachable_heap,  percent_of(stat_reachable_heap,  stat_reachable),
+               stat_moved,           percent_of(stat_moved,           stat_reachable),
+               stat_preserved_marks, percent_of(stat_preserved_marks, stat_reachable)
+  );
 
   print_heap_info(used());
   print_metaspace_info();
