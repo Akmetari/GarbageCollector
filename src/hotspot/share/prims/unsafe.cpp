@@ -824,6 +824,10 @@ UNSAFE_ENTRY(jint, Unsafe_GetLoadAverage0(JNIEnv *env, jobject unsafe, jdoubleAr
   return ret;
 } UNSAFE_END
 
+UNSAFE_LEAF(jboolean, Unsafe_FileSync(JNIEnv *env, jobject unsafe, jint fd)) {
+  return fsync(fd) != -1;
+} UNSAFE_END
+
 
 /// JVM_RegisterUnsafeMethods
 
@@ -903,6 +907,7 @@ static JNINativeMethod jdk_internal_misc_Unsafe_methods[] = {
     {CC "shouldBeInitialized0", CC "(" CLS ")Z",         FN_PTR(Unsafe_ShouldBeInitialized0)},
 
     {CC "fullFence",          CC "()V",                  FN_PTR(Unsafe_FullFence)},
+    {CC "fileSync",          CC "(I)Z",                  FN_PTR(Unsafe_FileSync)},
 };
 
 #undef CC

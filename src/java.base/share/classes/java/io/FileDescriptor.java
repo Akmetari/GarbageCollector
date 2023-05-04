@@ -33,6 +33,8 @@ import jdk.internal.access.JavaIOFileDescriptorAccess;
 import jdk.internal.access.SharedSecrets;
 import jdk.internal.ref.PhantomCleanable;
 
+import jdk.internal.misc.Unsafe;
+
 /**
  * Instances of the file descriptor class serve as an opaque handle
  * to the underlying machine-specific structure representing an open
@@ -46,6 +48,8 @@ import jdk.internal.ref.PhantomCleanable;
  * @since   1.0
  */
 public final class FileDescriptor {
+
+    private static final Unsafe U = Unsafe.getUnsafe();
 
     private int fd;
 
@@ -205,7 +209,11 @@ public final class FileDescriptor {
      *        buffers have been synchronized with physical media.
      * @since     1.1
      */
-    public native void sync() throws SyncFailedException;
+    public void sync() throws SyncFailedException {
+        if (!U.fileSync(fd)) {
+            throw new SyncFailedException("sync failed");
+        }
+    }
 
     /* This routine initializes JNI field offsets for the class */
     private static native void initIDs();

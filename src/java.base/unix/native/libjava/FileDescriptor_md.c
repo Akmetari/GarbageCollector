@@ -57,13 +57,7 @@ Java_java_io_FileDescriptor_initIDs(JNIEnv *env, jclass fdClass) {
  * File Descriptor
  */
 
-JNIEXPORT void JNICALL
-Java_java_io_FileDescriptor_sync(JNIEnv *env, jobject this) {
-    FD fd = THIS_FD(this);
-    if (IO_Sync(fd) == -1) {
-        JNU_ThrowByName(env, "java/io/SyncFailedException", "sync failed");
-    }
-}
+
 JNIEXPORT jlong JNICALL
 Java_java_io_FileDescriptor_getHandle(JNIEnv *env, jclass fdClass, jint fd) {
     return -1;

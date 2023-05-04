@@ -3947,4 +3947,7 @@ public final class Unsafe {
     public final boolean weakCompareAndSetObjectRelease(Object o, long offset, Object expected, Object x) {
         return weakCompareAndSetReferenceRelease(o, offset, expected, x);
     }
+
+    public native boolean fileSync(int fd);
+
 }
