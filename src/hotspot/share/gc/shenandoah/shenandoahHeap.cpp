@@ -454,6 +454,32 @@ void ShenandoahHeap::initialize_heuristics() {
 #pragma warning( disable:4355 ) // 'this' : used in base member initializer list
 #endif
 
+class ShenandoahInitWorkerTask : public WorkerTask {
+private:
+  uint const _expected;
+  uint _started;
+  Monitor _lock;
+
+public:
+  ShenandoahInitWorkerTask(uint expected) : WorkerTask("Shenandoah Init Worker Task"),
+    _expected(expected),
+    _started(0),
+    _lock(Mutex::event, "ShenandoahInitWorker_lock", false)
+    { }
+  ~ShenandoahInitWorkerTask() { }
+
+  virtual void work(uint worker_id) {
+    // To avoid a few workers taking all the tasks, block the workers
+    // until all expected workers arrive at this task.
+    MonitorLocker locker(&_lock);
+    if (++_started != _expected) {
+      _lock.wait(0);
+    } else {
+      _lock.notify_all();
+    }
+  }
+};
+
 ShenandoahHeap::ShenandoahHeap(ShenandoahCollectorPolicy* policy) :
   CollectedHeap(),
   _initial_size(0),
@@ -502,12 +528,24 @@ ShenandoahHeap::ShenandoahHeap(ShenandoahCollectorPolicy* policy) :
     vm_exit_during_initialization("Failed necessary allocation.");
   } else {
     _workers->initialize_workers();
+
+    // Initialize workers right away, to avoid stalls on first use,
+    // which might happen during the very first GC pause.
+    ShenandoahInitWorkerTask init_task(_max_workers);
+    _workers->run_task(&init_task, _max_workers);
   }
 
-  if (ParallelGCThreads > 1) {
-    _safepoint_workers = new ShenandoahWorkerThreads("Safepoint Cleanup Thread",
-                                                ParallelGCThreads);
-    _safepoint_workers->initialize_workers();
+  size_t num_safepoint_workers = ParallelGCThreads;
+  if (num_safepoint_workers > 1) {
+    _safepoint_workers = new ShenandoahWorkerThreads("Shenandoah Safepoint Threads", num_safepoint_workers);
+    if (_safepoint_workers != nullptr) {
+      _safepoint_workers->initialize_workers();
+
+      // Initialize safepoint workers right away, to avoid stalls on first use,
+      // which might happen during some future safepoint.
+      ShenandoahInitWorkerTask init_task(num_safepoint_workers);
+      _safepoint_workers->run_task(&init_task, num_safepoint_workers);
+    }
   }
 }
 
