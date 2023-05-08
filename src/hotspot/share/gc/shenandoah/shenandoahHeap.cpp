@@ -531,8 +531,10 @@ ShenandoahHeap::ShenandoahHeap(ShenandoahCollectorPolicy* policy) :
 
     // Initialize workers right away, to avoid stalls on first use,
     // which might happen during the very first GC pause.
-    ShenandoahInitWorkerTask init_task(_max_workers);
-    _workers->run_task(&init_task, _max_workers);
+    if (UseNewCode) {
+      ShenandoahInitWorkerTask init_task(_max_workers);
+      _workers->run_task(&init_task, _max_workers);
+    }
   }
 
   size_t num_safepoint_workers = ParallelGCThreads;
@@ -543,8 +545,10 @@ ShenandoahHeap::ShenandoahHeap(ShenandoahCollectorPolicy* policy) :
 
       // Initialize safepoint workers right away, to avoid stalls on first use,
       // which might happen during some future safepoint.
-      ShenandoahInitWorkerTask init_task(num_safepoint_workers);
-      _safepoint_workers->run_task(&init_task, num_safepoint_workers);
+      if (UseNewCode) {
+        ShenandoahInitWorkerTask init_task(num_safepoint_workers);
+        _safepoint_workers->run_task(&init_task, num_safepoint_workers);
+      }
     }
   }
 }
