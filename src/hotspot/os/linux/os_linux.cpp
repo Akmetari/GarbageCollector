@@ -4514,8 +4514,8 @@ static void workaround_expand_exec_shield_cs_limit() {
 jint os::init_2(void) {
 
   if (TimerSlack > 0) {
-    if (prctl(PR_SET_TIMERSLACK, TimerSlack) <= 0) {
-      vm_exit_during_initialization("Setting timer slack value failed");
+    if (prctl(PR_SET_TIMERSLACK, TimerSlack) < 0) {
+      vm_exit_during_initialization("Setting timer slack value failed: %s", os::strerror(errno));
     }
   }
 
