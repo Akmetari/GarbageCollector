@@ -110,6 +110,7 @@
 # include <inttypes.h>
 # include <sys/ioctl.h>
 # include <linux/elf-em.h>
+# include <sys/prctl.h>
 #ifdef __GLIBC__
 # include <malloc.h>
 #endif
@@ -4511,6 +4512,8 @@ static void workaround_expand_exec_shield_cs_limit() {
 
 // this is called _after_ the global arguments have been parsed
 jint os::init_2(void) {
+
+  prctl(PR_SET_TIMERSLACK, TimerSlack);
 
   // This could be set after os::Posix::init() but all platforms
   // have to set it the same so we have to mirror Solaris.

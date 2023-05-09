@@ -77,7 +77,12 @@
           "Use CPU_ALLOC code path in os::active_processor_count ")     \
                                                                         \
   product(bool, DumpPerfMapAtExit, false, DIAGNOSTIC,                   \
-          "Write map file for Linux perf tool at exit")
+          "Write map file for Linux perf tool at exit")                 \
+                                                                        \
+  product(bool, TimerSlack, false, EXPERIMENTAL,                        \
+          "Set the timer slack value to this number of nanoseconds. ")  \
+                                                                        \
+
 
 // end of RUNTIME_OS_FLAGS
 
