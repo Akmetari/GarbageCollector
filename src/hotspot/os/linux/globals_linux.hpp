@@ -80,7 +80,11 @@
           "Write map file for Linux perf tool at exit")                 \
                                                                         \
   product(intx, TimerSlack, -1, EXPERIMENTAL,                           \
-          "Set the timer slack value to this number of nanoseconds. ")  \
+          "(Linux-specific) Override the timer slack value to this "    \
+          "number of nanoseconds. Lower value provides more accurate "  \
+          "high-precision timers, at expense of possibly higher power " \
+          "draw. Set -1 to disable. Set 0 to use the system-wide "      \
+          "default. See prctl(PR_SET_TIMERSLACK) for more info.")       \
                                                                         \
 
 
