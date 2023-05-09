@@ -79,7 +79,7 @@
   product(bool, DumpPerfMapAtExit, false, DIAGNOSTIC,                   \
           "Write map file for Linux perf tool at exit")                 \
                                                                         \
-  product(bool, TimerSlack, false, EXPERIMENTAL,                        \
+  product(intx, TimerSlack, false, EXPERIMENTAL,                        \
           "Set the timer slack value to this number of nanoseconds. ")  \
                                                                         \
 

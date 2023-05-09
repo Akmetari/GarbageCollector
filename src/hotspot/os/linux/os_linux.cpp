@@ -4513,7 +4513,9 @@ static void workaround_expand_exec_shield_cs_limit() {
 // this is called _after_ the global arguments have been parsed
 jint os::init_2(void) {
 
-  prctl(PR_SET_TIMERSLACK, TimerSlack);
+  if (prctl(PR_SET_TIMERSLACK, TimerSlack) <= 0) {
+    vm_exit_during_initialization("Setting timer slack value failed");
+  }
 
   // This could be set after os::Posix::init() but all platforms
   // have to set it the same so we have to mirror Solaris.
